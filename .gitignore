@@ -1,0 +1,15 @@
+/build/
+/dist/
+/.cache/
+/.env
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.apk
+*.idsig
+__pycache__/
+*.pyc
+local.properties
+.idea/
+.vscode/

@@ -1,0 +1,1 @@
+<resources><string-array name="xposed_scope"><item>com.xiaomi.smarthome</item><item>com.miui.securitycenter</item></string-array></resources>
