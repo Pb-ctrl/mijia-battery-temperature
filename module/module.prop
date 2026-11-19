@@ -2,5 +2,5 @@ id=mijia_battery_temperature
 name=米家本机电池温度扩展（实验版）
 version=0.2.2-power-preview
 versionCode=4
-author=Local
+author=屑屑
 description=严格读取已核查的原始battery温度节点；发现文件覆盖、来源改变或驱动读数不一致即停止，不回退到系统显示值。仅适配zorn/OS4.0.3.0、米家11.1.845和手机管家13.8.1。
