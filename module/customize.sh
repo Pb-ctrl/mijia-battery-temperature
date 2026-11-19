@@ -9,5 +9,6 @@ ui_print "Install the companion APK, then enable its two recommended LSPosed sco
 ui_print "No framework is installed automatically. Reboot after setup."
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 set_perm "$MODPATH/service.sh" 0 0 0755
+set_perm "$MODPATH/power-events" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755

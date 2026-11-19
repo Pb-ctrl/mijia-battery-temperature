@@ -21,8 +21,6 @@ read_physical_source() {
     SOURCE_REASON=unverified_source
     SOURCE_PATH=
     SOURCE_TEMP=
-    [ "$(getprop ro.product.device)" = "zorn" ] || { SOURCE_REASON=unsupported_device; return 1; }
-    [ "$(getprop ro.build.version.incremental)" = "OS4.0.3.0.XOKCNXM" ] || { SOURCE_REASON=unsupported_system; return 1; }
     zone=/sys/devices/virtual/thermal/thermal_zone75
     raw=/sys/class/power_supply/battery/temp
 

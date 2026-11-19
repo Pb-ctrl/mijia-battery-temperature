@@ -26,8 +26,13 @@ jobs:
         # GitHub's Ubuntu image already has Command-Line Tools and SDK licenses.
         # Do not request the retired legacy "tools" SDK package.
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build the AArch64 power event listener
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          aarch64-linux-gnu-gcc -static -Os -s -Wall -Wextra -Werror -o power-events module/power-events.c
       - name: Build development-signed artifacts and run checks
-        run: python scripts/build.py
+        run: python scripts/build.py --power-events power-events
       - uses: actions/upload-artifact@v4
         with:
           name: mijia-battery-temperature-ci-development

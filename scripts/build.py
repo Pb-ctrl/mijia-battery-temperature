@@ -76,6 +76,7 @@ def main() -> None:
     parser.add_argument("--xposed-api", type=Path, help="Use an existing, hash-checked Xposed API 82 jar")
     parser.add_argument("--signing", choices=["development", "release"], default="development")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--power-events", type=Path, help="Statically linked AArch64 power event listener")
     args = parser.parse_args()
     version = (ROOT / "version.txt").read_text(encoding="ascii").strip()
     # Fresh build directories avoid stale anonymous Java classes after source edits.
@@ -84,6 +85,8 @@ def main() -> None:
     run_checks(build)
     if args.check_only:
         return
+    if not args.power_events or not args.power_events.is_file():
+        raise RuntimeError("Build module/power-events.c for AArch64 and pass --power-events.")
 
     sdk = Path(args.sdk) if args.sdk else None
     android_jar = args.android_jar or (sdk / "platforms/android-35/android.jar" if sdk else None)
@@ -158,8 +161,9 @@ def main() -> None:
     module = output / f"MijiaBatteryTemperature-KSU-{version}.zip"
     with zipfile.ZipFile(module, "w", zipfile.ZIP_DEFLATED) as z:
         for path in sorted((ROOT / "module").iterdir()):
-            if path.is_file():
+            if path.is_file() and path.suffix in {".sh", ".prop"}:
                 zip_file(z, path.name, path.read_bytes(), executable=path.suffix == ".sh")
+        zip_file(z, "power-events", args.power_events.read_bytes(), executable=True)
         zip_file(z, "README.md", (ROOT / "README.md").read_bytes())
     for archive in [apk, module]:
         with zipfile.ZipFile(archive) as z:

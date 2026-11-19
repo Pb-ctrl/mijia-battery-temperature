@@ -12,6 +12,14 @@ sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
 包名含分号，PowerShell 中必须保留引号。SDK 安装和许可接受由你完成，构建脚本不会自动接受许可。参见 [Android 官方文档](https://developer.android.com/tools/sdkmanager)。
 
+KSU ZIP 还需要静态链接的 AArch64 监听器。在 Ubuntu 或 WSL 中安装 `gcc-aarch64-linux-gnu`，并在仓库根目录编译：
+
+```shell
+aarch64-linux-gnu-gcc -static -Os -s -Wall -Wextra -Werror -o power-events module/power-events.c
+```
+
+以下命令假定生成的 `power-events` 位于仓库根目录。
+
 ## 2. Windows PowerShell
 
 ```powershell
@@ -19,7 +27,7 @@ git clone https://github.com/Pb-ctrl/mijia-battery-temperature.git
 Set-Location mijia-battery-temperature
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
-python scripts/build.py
+python scripts/build.py --power-events ./power-events
 ```
 
 按实际安装位置替换路径。若 JDK 已在 PATH，可不设置 `JAVA_HOME`。安装 Git for Windows 并让 `sh` 在 PATH，可同时执行 Shell 脚本语法检查；缺少 sh 时会明确提示跳过，Linux CI 会执行该项。
@@ -31,7 +39,7 @@ git clone https://github.com/Pb-ctrl/mijia-battery-temperature.git
 cd mijia-battery-temperature
 export JAVA_HOME=/path/to/jdk-17
 export ANDROID_HOME=/path/to/android-sdk
-python3 scripts/build.py
+python3 scripts/build.py --power-events ./power-events
 ```
 
 macOS 可用 `/usr/libexec/java_home -v 17` 查找已安装 JDK；Linux 路径随安装方式不同。
@@ -39,9 +47,9 @@ macOS 可用 `/usr/libexec/java_home -v 17` 查找已安装 JDK；Linux 路径�
 ## 4. 自定义工具路径与离线构建
 
 ```shell
-python scripts/build.py --sdk /path/to/android-sdk
-python scripts/build.py --android-jar /path/to/android.jar --build-tools /path/to/build-tools
-python scripts/build.py --xposed-api /path/to/api-82.jar
+python scripts/build.py --power-events ./power-events --sdk /path/to/android-sdk
+python scripts/build.py --power-events ./power-events --android-jar /path/to/android.jar --build-tools /path/to/build-tools
+python scripts/build.py --power-events ./power-events --xposed-api /path/to/api-82.jar
 ```
 
 Windows 同样支持这些参数，路径含空格时加引号。
@@ -90,7 +98,7 @@ python scripts/build.py --check-only
 | `MIJIA_KEY_PASSWORD` | 可选，省略时使用密钥库密码 |
 
 ```shell
-python scripts/build.py --signing release
+python scripts/build.py --power-events ./power-events --signing release
 ```
 
 密码通过环境变量交给工具，不写进仓库或打印在日志中。不要提交密钥或 `.env` 文件。

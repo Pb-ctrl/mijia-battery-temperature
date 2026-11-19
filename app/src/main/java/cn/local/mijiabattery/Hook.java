@@ -6,6 +6,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -49,16 +50,16 @@ public final class Hook implements IXposedHookLoadPackage {
 
     private static void log(String s) { XposedBridge.log("[MijiaBattery] " + s); }
     private static boolean enabled() {
-        if (context == null) return false;
-        try {
-            long age = System.currentTimeMillis() / 1000 - Settings.Global.getLong(context.getContentResolver(), "mijia_bt_heartbeat", 0);
-            return age >= 0 && age < 45 && Settings.Global.getInt(context.getContentResolver(), "mijia_bt_source_verified", 0) == 1;
-        } catch (Throwable t) { return false; }
+        return currentSample() != null;
+    }
+    private static Sample currentSample() {
+        if (context == null) return null;
+        try { return Sample.read(context.getContentResolver()); }
+        catch (RuntimeException ignored) { return null; }
     }
     private static int temperature() {
-        if (context == null || !enabled()) return Integer.MIN_VALUE;
-        int t = Settings.Global.getInt(context.getContentResolver(), "mijia_bt_temp", Integer.MIN_VALUE);
-        return t >= -400 && t <= 1200 ? t : Integer.MIN_VALUE;
+        Sample sample = currentSample();
+        return sample == null ? Integer.MIN_VALUE : sample.temperature;
     }
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lp) throws Throwable {
         if (!MI.equals(lp.packageName) && !SC.equals(lp.packageName)) return;
@@ -244,7 +245,7 @@ public final class Hook implements IXposedHookLoadPackage {
             protected void beforeHookedMethod(MethodHookParam p) {
                 if (!markedItem(p.thisObject)) return;
                 int[] v = itemValues(p.thisObject); int t = temperature();
-                boolean result = enabled() && t != Integer.MIN_VALUE && Logic.valid(v) && Logic.satisfied(v, t);
+                boolean result = Logic.satisfied(v, t);
                 if (result && v[0] == 2) result = Boolean.TRUE.equals(dispatchChange.get());
                 p.setResult(result);
             }
@@ -266,32 +267,47 @@ public final class Hook implements IXposedHookLoadPackage {
                 p.args[0] = filtered;
             }
         });
-        final Handler poll = new Handler(Looper.getMainLooper());
-        poll.postDelayed(new Runnable() {
-            public void run() {
+        final Handler events = new Handler(Looper.getMainLooper());
+        final class Evaluator {
+            private Sample previous;
+
+            void evaluate(boolean rulesChanged) {
                 try {
-                    int now = temperature();
-                    if (now == Integer.MIN_VALUE) { baselines.clear(); }
+                    Sample sample = currentSample();
+                    Sample beforeSample = previous;
+                    previous = sample;
+                    if (sample == null) { baselines.clear(); }
                     else {
+                        boolean newSession = beforeSample == null || !beforeSample.epoch.equals(sample.epoch)
+                                || sample.timestamp - beforeSample.timestamp >= 45;
+                        if (newSession) baselines.clear();
+                        if (!newSession && !rulesChanged && beforeSample.temperature == sample.temperature) return;
+                        int now = sample.temperature;
                         Object engine = XposedHelpers.callStaticMethod(manager, "G0");
                         Map<?, ?> items = (Map<?, ?>) XposedHelpers.getObjectField(engine, "z");
                         java.util.HashSet<String> alive = new java.util.HashSet<>();
                         for (Object item : items.values()) {
                             if (!battery.isInstance(item) || !markedItem(item)) continue;
                             String id = (String) XposedHelpers.callMethod(item, "d");
-                            String stateKey = String.valueOf(XposedHelpers.callMethod(item, "j")) + "|" + id;
-                            alive.add(stateKey);
                             int[] vals = itemValues(item);
+                            if (!Logic.valid(vals)) continue;
+                            String stateKey = String.valueOf(XposedHelpers.callMethod(item, "j"))
+                                    + "|" + id + "|" + vals[0] + "|" + vals[1];
+                            alive.add(stateKey);
                             Integer before = baselines.put(stateKey, now);
                             if (Logic.shouldTrigger(vals, before, now)) {
                                 final Object candidate = item;
                                 Handler worker = (Handler) XposedHelpers.getObjectField(engine, "e");
                                 worker.post(() -> {
-                                    if (!enabled()) return;
+                                    Sample latest = currentSample();
+                                    if (latest == null || !latest.epoch.equals(sample.epoch)
+                                            || !Logic.satisfied(vals, latest.temperature)
+                                            || !items.containsValue(candidate)) return;
                                     try {
                                         dispatchChange.set(Boolean.TRUE);
                                         XposedHelpers.callMethod(engine, "Q", candidate, XposedHelpers.callMethod(candidate, "j"));
-                                        log("Temperature crossing dispatched");
+                                        log("Dispatched " + Logic.summary(vals) + " at " + Logic.display(latest.temperature)
+                                                + (before == null ? " (first valid sample)" : " (crossing)"));
                                     } catch (Throwable t) { log("Dispatch failed: " + t.getClass().getSimpleName()); }
                                     finally { dispatchChange.remove(); }
                                 });
@@ -299,9 +315,24 @@ public final class Hook implements IXposedHookLoadPackage {
                         }
                         baselines.keySet().retainAll(alive);
                     }
-                } catch (Throwable t) { log("Temperature polling unavailable: " + t.getClass().getSimpleName()); }
-                finally { poll.postDelayed(this, 5000); }
+                } catch (Throwable t) { log("Temperature evaluation unavailable: " + t.getClass().getSimpleName()); }
             }
-        }, 10000);
+        }
+        Evaluator evaluator = new Evaluator();
+        Runnable refreshRules = () -> evaluator.evaluate(true);
+        Class<?> task = XposedHelpers.findClass("com.miui.autotask.taskitem.TaskItem", loader);
+        XposedHelpers.findAndHookMethod(manager, "u", task, new XC_MethodHook() {
+            protected void afterHookedMethod(MethodHookParam p) {
+                if (battery.isInstance(p.args[0]) && markedItem(p.args[0])) events.post(refreshRules);
+            }
+        });
+        XposedHelpers.findAndHookMethod(manager, "q1", String.class, java.util.List.class, new XC_MethodHook() {
+            protected void afterHookedMethod(MethodHookParam p) { events.post(refreshRules); }
+        });
+        context.getContentResolver().registerContentObserver(Settings.Global.getUriFor(Sample.KEY), false,
+                new ContentObserver(events) {
+                    public void onChange(boolean selfChange) { evaluator.evaluate(false); }
+                });
+        events.post(refreshRules);
     }
 }

@@ -3,7 +3,6 @@ package cn.local.mijiabattery;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
-import android.provider.Settings;
 import android.widget.TextView;
 import android.widget.ScrollView;
 
@@ -25,17 +24,13 @@ public class StatusActivity extends Activity {
         catch (Exception e) { return "未读取到"; }
     }
     private void update() {
-        long beat = Settings.Global.getLong(getContentResolver(), "mijia_bt_heartbeat", 0);
-        long age = System.currentTimeMillis() / 1000 - beat;
-        int temp = Settings.Global.getInt(getContentResolver(), "mijia_bt_temp", Integer.MIN_VALUE);
-        boolean verified = Settings.Global.getInt(getContentResolver(), "mijia_bt_source_verified", 0) == 1;
-        boolean online = verified && beat > 0 && age >= 0 && age < 45;
-        String reading = !online || temp == Integer.MIN_VALUE ? "真实温度来源不可用／未核查" : Logic.display(temp);
-        String source = Settings.Global.getString(getContentResolver(), "mijia_bt_source");
-        text.setText("米家电池温度扩展 · 严格来源版 0.2.1-preview\n\n"
+        Sample sample = Sample.read(getContentResolver());
+        boolean online = sample != null;
+        String reading = online ? Logic.display(sample.temperature) : "真实温度来源不可用／未核查";
+        text.setText("米家电池温度扩展 · 省电预览版 0.2.2\n\n"
             + "KSU 采样：" + (online ? "在线，节点来源检查通过" : "停止，不执行温度规则")
             + "\n电池温度：" + reading
-            + "\n采样来源：" + (online && source != null ? source : "不可用")
+            + "\n采样来源：" + (online ? sample.source : "不可用")
             + "\n检查结果取决于当前采样分支。无已识别伪装模块时核对 battery thermal 节点和标准驱动接口；兼容分支仅检查标准驱动接口。节点未被覆盖不等于独立硬件测温证明。"
             + "\n米家：" + version("com.xiaomi.smarthome")
             + "\n手机管家：" + version("com.miui.securitycenter")
